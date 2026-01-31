@@ -1,37 +1,43 @@
-import * as THREE from "three";
+import { Line } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
 
 export default function ShiningLink({
   start,
   end,
-  color = "#00eaff",
-  radius = 0.12
+  color = "#7dd3fc"
 }) {
-  const startVec = new THREE.Vector3(...start);
-  const endVec = new THREE.Vector3(...end);
+  const glowRef = useRef();
 
-  const mid = startVec.clone().lerp(endVec, 0.5);
-  const length = startVec.distanceTo(endVec);
-
-  const direction = new THREE.Vector3()
-    .subVectors(endVec, startVec)
-    .normalize();
-
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(
-    new THREE.Vector3(0, 1, 0),
-    direction
-  );
+  // Animate glow opacity (shimmer)
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (glowRef.current) {
+      glowRef.current.material.opacity =
+        0.4 + Math.sin(t * 2) * 0.2;
+    }
+  });
 
   return (
-    <mesh position={mid} quaternion={quaternion}>
-      <cylinderGeometry args={[radius, radius, length, 32]} />
-      <meshStandardMaterial
+    <>
+      {/* Inner transparent cable */}
+      <Line
+        points={[start, end]}
         color={color}
-        emissive={color}
-        emissiveIntensity={3}
-        transparent={false}
-        depthWrite={false}
-        toneMapped={false}
+        lineWidth={1}
+        transparent
+        opacity={0.35}
       />
-    </mesh>
+
+      {/* Outer glowing shine */}
+      <Line
+        ref={glowRef}
+        points={[start, end]}
+        color={color}
+        lineWidth={3}
+        transparent
+        opacity={0.6}
+      />
+    </>
   );
 }
