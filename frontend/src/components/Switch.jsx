@@ -1,20 +1,18 @@
 import { Text } from "@react-three/drei";
 
-export default function Switch({ position, label, type = "csr" }) {
+export default function Switch({ position, label }) {
   return (
     <group position={position}>
       <mesh>
-        {type === "leaf" ? (
-          <cylinderGeometry args={[0.9, 0.9, 0.6, 6]} />
-        ) : (
-          <cylinderGeometry args={[0.7, 0.7, 0.8, 16]} />
-        )}
+        <boxGeometry args={[1.4, 1.4, 1.4]} />
         <meshStandardMaterial
-          color={type === "leaf" ? "#6366f1" : "#1e3a8a"}
+          color="#38bdf8"
+          roughness={0.5}
+          metalness={0.15}
         />
       </mesh>
 
-      <Text position={[0, -1, 0]} fontSize={0.24} color="white">
+      <Text position={[0, -1.2, 0]} fontSize={0.25} color="#7dd3fc">
         {label}
       </Text>
     </group>

@@ -1,47 +1,102 @@
-import RU from "./RU";
-import Switch from "./Switch";
+import CenteredGroup from "./CenteredGroup";
+import GlassContainer from "./GlassContainer";
+import GridFloor from "./GridFloor";
 import DU from "./DU";
-import LinkCylinder from "./LinkCylinder";
+import Switch from "./Switch";
+import RUCluster from "./RUCluster";
+import InfoPanel from "./InfoPanel";
+import ShiningLink from "./ShiningLink";
 
 export default function Scene() {
-  const radiusRU = 6;
-  const radiusCSR = 3;
-
   return (
-    <group position={[0, 0, 0]}>
-      
-      {/* Leaf Switch (CENTER) */}
-      <Switch position={[0, 0, 0]} label="Leaf" />
+    <CenteredGroup scale={1.2} yOffset={-3.5}>
 
-      {/* DU (RIGHT) */}
-      <DU position={[4, 0, 0]} />
-      <LinkCylinder start={[0, 0, 0]} end={[4, 0, 0]} />
+      {/* ============================= */}
+      {/* SINGLE TRANSPARENT GLASS BOX */}
+      {/* ============================= */}
+      <GlassContainer />
 
-      {/* Upper CSR */}
-      <Switch position={[-2, 2, 0]} label="CSR" />
-      <LinkCylinder start={[-2, 2, 0]} end={[0, 0, 0]} />
+      {/* ============================= */}
+      {/* GRID FLOOR */}
+      {/* ============================= */}
+      <GridFloor />
 
-      {/* Lower CSR */}
-      <Switch position={[-2, -2, 0]} label="CSR" />
-      <LinkCylinder start={[-2, -2, 0]} end={[0, 0, 0]} />
+      {/* ============================= */}
+      {/* DU (BOTTOM CENTER) */}
+      {/* ============================= */}
+      <DU position={[0, 0, 0]} />
 
-      {/* Upper RUs (CIRCULAR ARC) */}
-      <RU position={[-4.5, 3, 0]} />
-      <RU position={[-6, 2, 0]} />
-      <RU position={[-4.5, 1, 0]} />
+      {/* ============================= */}
+      {/* SHINING LINKS (ONLY THESE GLOW) */}
+      {/* ============================= */}
 
-      <LinkCylinder start={[-4.5, 3, 0]} end={[-2, 2, 0]} />
-      <LinkCylinder start={[-6, 2, 0]} end={[-2, 2, 0]} />
-      <LinkCylinder start={[-4.5, 1, 0]} end={[-2, 2, 0]} />
+      {/* DU → Top Hub */}
+      <ShiningLink
+        start={[0, 1.2, 0]}
+        end={[0, 7, 0]}
+        color="#22c55e"
+      />
 
-      {/* Lower RUs (CIRCULAR ARC) */}
-      <RU position={[-4.5, -1, 0]} />
-      <RU position={[-6, -2, 0]} />
-      <RU position={[-4.5, -3, 0]} />
+      {/* ============================= */}
+      {/* TOP HUB SWITCH */}
+      {/* ============================= */}
+      <Switch position={[0, 7, 0]} label="Link 1 | Link 3" />
 
-      <LinkCylinder start={[-4.5, -1, 0]} end={[-2, -2, 0]} />
-      <LinkCylinder start={[-6, -2, 0]} end={[-2, -2, 0]} />
-      <LinkCylinder start={[-4.5, -3, 0]} end={[-2, -2, 0]} />
-    </group>
+      {/* ============================= */}
+      {/* L-SHAPE LEFT BRANCH (X AXIS) */}
+      {/* ============================= */}
+      <ShiningLink
+        start={[0, 7, 0]}
+        end={[-7, 7, 0]}
+        color="#38bdf8"
+      />
+
+      <Switch position={[-7, 7, 0]} label="CSR" />
+
+      <RUCluster
+        position={[-7, 4, -2]}
+        color="#22c55e"
+      />
+
+      {/* ============================= */}
+      {/* L-SHAPE FRONT BRANCH (Z AXIS) */}
+      {/* ============================= */}
+      <ShiningLink
+        start={[0, 7, 0]}
+        end={[0, 7, -7]}
+        color="#38bdf8"
+      />
+
+      <Switch position={[0, 7, -7]} label="CSR" />
+
+      <RUCluster
+        position={[2, 4, -7]}
+        color="#ef4444"
+      />
+
+      {/* ============================= */}
+      {/* INFO / HUD PANELS */}
+      {/* ============================= */}
+      <InfoPanel
+        position={[-4.5, 10, 0]}
+        text="Fronthaul Network Topology Analysis"
+      />
+
+      <InfoPanel
+        position={[4.5, 10, -2]}
+        text="Link Utilization: 75%"
+      />
+
+      <InfoPanel
+        position={[-8, 5, -2]}
+        text="RU Cluster A\nTraffic: Normal"
+      />
+
+      <InfoPanel
+        position={[3, 5, -9]}
+        text="RU Cluster B\nCongestion Detected"
+      />
+
+    </CenteredGroup>
   );
 }
