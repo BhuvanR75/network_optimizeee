@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Brain, Server, Users, Activity } from 'lucide-react';
+import { LineChart, Line, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
+import { Router, Server, Activity, Zap, TrendingUp, TrendingDown } from 'lucide-react';
+import { io } from 'socket.io-client';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -9,398 +10,296 @@ function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
-const Pipe = ({ label, bandwidth, errorRate, isDonor = false }) => {
-    // Bandwidth maps directly to width percentage (min 10%, max 100%)
-    const widthPercent = Math.max(10, Math.min(100, bandwidth));
+// --- COMPONENT: ROUTER NODE ---
+const RouterNode = ({ label, ip, isSource = false }) => (
+    <div className="flex flex-col items-center gap-4 relative z-20">
+        <div className={cn(
+            "w-32 h-32 rounded-3xl border-4 flex items-center justify-center relative shadow-[0_0_60px_rgba(0,0,0,0.8)] bg-[#050505] transition-transform duration-500 hover:scale-105",
+            isSource ? "border-indigo-500 shadow-[0_0_50px_rgba(99,102,241,0.3)]" : "border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.3)]"
+        )}>
+            <div className="absolute inset-2 border-2 border-dashed border-gray-800 opacity-30 rounded-2xl" />
+            <Router size={56} className={cn("relative z-10", isSource ? "text-indigo-400" : "text-cyan-400")} />
+            
+            {/* Blinking Light */}
+            <div className="absolute -top-3 -right-3 w-5 h-5 bg-green-500 rounded-full border-4 border-black animate-pulse shadow-[0_0_15px_#22c55e]" />
+        </div>
+        <div className="text-center">
+            <h3 className="text-2xl font-black font-mono tracking-tighter text-white">{label}</h3>
+            <span className="text-xs text-gray-500 font-mono bg-black/50 px-3 py-1 rounded border border-gray-800 backdrop-blur-md">
+                {ip}
+            </span>
+        </div>
+    </div>
+);
 
-    const getColor = (rate) => {
-        if (rate > 3) return "from-red-600 to-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]"; // Pulsing Red
-        if (rate > 1) return "from-yellow-500 to-orange-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]"; // Warning
-        return "from-cyan-500 to-blue-500 shadow-[0_0_15px_rgba(6,182,212,0.4)]"; // Optimal
-    };
+// --- COMPONENT: ULTRA-DYNAMIC LINK ---
+const DynamicLink = ({ capacity, throughput, loss }) => {
+    // --- THE "MASSIVE FACTOR" SCALING ---
+    // Min Capacity (4 Mbps) -> 4px height (Thread)
+    // Max Capacity (12 Mbps) -> 450px height (Massive Tunnel)
+    // We use a power curve so the growth feels explosive
+    
+    const minCap = 4.0;
+    const maxCap = 12.0;
+    const rawPct = Math.max(0, Math.min(1, (capacity - minCap) / (maxCap - minCap)));
+    
+    // Power curve: Makes higher values significantly larger than lower ones
+    const explosivePct = Math.pow(rawPct, 1.5); 
+    
+    // Map to pixels: 4px to 450px
+    const pipeHeight = 4 + (explosivePct * 446);
 
-    const isCongested = errorRate > 3;
+    const isCongested = loss > 1.5;
+    const pipeColor = isCongested ? "rgba(239, 68, 68, 0.9)" : "rgba(6, 182, 212, 0.9)";
+    const glowColor = isCongested ? "rgba(239, 68, 68, 0.6)" : "rgba(34, 211, 238, 0.4)";
 
     return (
-        <div className="flex items-center gap-6 w-full mb-10 group">
-            <div className="w-24 text-right">
-                <div className="text-cyan-100 font-mono text-sm font-bold">{label}</div>
-                <div className="text-[10px] text-gray-500 font-mono">{bandwidth.toFixed(0)} Gbps</div>
+        <div className="flex-1 relative h-[500px] flex items-center justify-center px-10 perspective-[1000px]">
+            
+            {/* Reference Grid lines to show scale */}
+            <div className="absolute inset-0 flex flex-col justify-center items-center opacity-20 pointer-events-none">
+                 {[...Array(10)].map((_, i) => (
+                    <div key={i} className="w-full h-px bg-gray-700 my-4" />
+                 ))}
             </div>
 
-            <div className="flex-1 h-16 bg-gray-900/40 rounded-r-full rounded-l-md border border-gray-800 relative overflow-visible backdrop-blur-sm">
-                {/* The Pipe Content - Physical Expansion */}
+            {/* BANDWIDTH NUMBER (Floating) */}
+            <motion.div 
+                className="absolute top-10 z-30 flex flex-col items-center"
+                animate={{ y: isCongested ? [0, -5, 0] : 0 }}
+            >
+                <div className="text-[10px] text-gray-400 font-mono tracking-[0.3em] uppercase bg-black/60 px-2 py-1 rounded backdrop-blur-md border border-gray-800 mb-2">
+                    Current Capacity
+                </div>
+                <div className={cn(
+                    "text-5xl font-black font-mono drop-shadow-2xl transition-colors duration-300", 
+                    isCongested ? "text-red-500" : "text-white"
+                )}>
+                    {capacity.toFixed(1)}
+                    <span className="text-lg text-gray-500 ml-2">Mbps</span>
+                </div>
+            </motion.div>
+
+            {/* --- THE PIPE ITSELF --- */}
+            <motion.div
+                className="w-full relative z-10 rounded-lg border-y-2 overflow-hidden"
+                initial={false}
+                animate={{ 
+                    height: pipeHeight,
+                    backgroundColor: isCongested ? "rgba(50,0,0,0.5)" : "rgba(0,20,30,0.5)",
+                    borderColor: isCongested ? "#ef4444" : "#22d3ee",
+                    boxShadow: `0 0 ${30 + (explosivePct * 100)}px ${glowColor}` // Massive Glow
+                }}
+                transition={{ type: "spring", stiffness: 40, damping: 15 }}
+            >
+                {/* 1. Inner Texture (Grid) */}
+                <div className="absolute inset-0 opacity-30 bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+                
+                {/* 2. Moving Particles (Data Flow) */}
                 <motion.div
-                    className={cn(
-                        "h-full rounded-r-full rounded-l-md bg-gradient-to-r relative overflow-hidden transition-colors duration-500",
-                        getColor(errorRate)
-                    )}
-                    initial={false}
-                    animate={{ width: `${widthPercent}%` }}
-                    transition={{ type: "spring", stiffness: 40, damping: 20, duration: 2 }} // Smoother transition
+                    className="absolute inset-0 w-[200%] h-full flex items-center"
+                    animate={{ x: ["-50%", "0%"] }}
+                    transition={{ 
+                        repeat: Infinity, 
+                        duration: Math.max(0.1, 1.5 - (throughput / 8)), // Speed Control
+                        ease: "linear" 
+                    }}
                 >
-                    {/* Flow Animation (Slower = Less Bandwidth, Faster = More) */}
-                    <motion.div
-                        className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 relative"
-                    />
-                    <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-                        animate={{ x: ["-100%", "100%"] }}
-                        transition={{ repeat: Infinity, duration: Math.max(0.5, 2 - (bandwidth / 100)), ease: "linear" }}
-                        style={{ skewX: -20 }}
-                    />
+                    {/* The "Data" pattern */}
+                    <div className={cn(
+                        "w-full h-full",
+                        isCongested 
+                            ? "bg-[repeating-linear-gradient(90deg,transparent,transparent_50px,rgba(239,68,68,0.5)_50px,rgba(239,68,68,0.8)_55px)]"
+                            : "bg-[repeating-linear-gradient(90deg,transparent,transparent_50px,rgba(34,211,238,0.5)_50px,rgba(255,255,255,0.8)_55px)]"
+                    )} />
                 </motion.div>
 
-                {/* Congestion Pulse Overlay */}
+                {/* 3. Congestion Flash Overlay */}
                 <AnimatePresence>
                     {isCongested && (
                         <motion.div
-                            initial={{ opacity: 0, scale: 1 }}
-                            animate={{ opacity: [0, 0.4, 0], scale: [1, 1.05, 1] }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0, 0.6, 0] }}
                             exit={{ opacity: 0 }}
-                            transition={{ repeat: Infinity, duration: 0.8 }}
-                            className="absolute inset-0 rounded-r-full rounded-l-md bg-red-500/20 border-2 border-red-500/50 z-20 pointer-events-none"
+                            transition={{ repeat: Infinity, duration: 0.2 }}
+                            className="absolute inset-0 bg-red-600 mix-blend-overlay"
                         />
                     )}
                 </AnimatePresence>
+            </motion.div>
+
+            {/* THROUGHPUT (Bottom Label) */}
+            <div className="absolute bottom-10 z-30">
+                 <div className="flex items-center gap-3 bg-black/80 px-5 py-2 rounded-full border border-gray-700 backdrop-blur-xl shadow-2xl">
+                    <div className={cn("w-3 h-3 rounded-full", isCongested ? "bg-red-500 animate-ping" : "bg-emerald-500 shadow-[0_0_10px_#10b981]")} />
+                    <span className="text-xs font-mono text-gray-400 tracking-widest">ACTUAL TRAFFIC:</span>
+                    <span className="text-2xl font-bold font-mono text-white">{throughput.toFixed(2)} Mbps</span>
+                 </div>
             </div>
 
-            {/* Metrics & Critic Feedback */}
-            <div className="w-32 font-mono text-xs pl-4 border-l border-gray-800">
-                <div className={cn("text-2xl font-black tracking-tighter", isCongested ? "text-red-500 animate-pulse" : "text-emerald-400")}>
-                    {errorRate.toFixed(2)}%
-                </div>
-                <div className="text-gray-500 text-[10px] flex justify-between">
-                    <span>LOSS</span>
-                    {isDonor && <span className="text-blue-400 font-bold">DONOR</span>}
-                </div>
-            </div>
         </div>
     );
 };
 
-const BufferGauge = ({ level, label }) => {
-    // Level 0-100
-    const isCritical = level > 80;
-
-    return (
-        <div className="flex flex-col items-center gap-2 group">
-            <div className="relative w-8 h-32 bg-gray-900 border border-gray-700 rounded-full overflow-hidden">
-                {/* Glass reflection */}
-                <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-transparent z-20 pointer-events-none" />
-
-                {/* Liquid Level */}
-                <motion.div
-                    className={cn(
-                        "absolute bottom-0 w-full transition-colors duration-300",
-                        isCritical ? "bg-gradient-to-t from-red-600 to-red-400" : "bg-gradient-to-t from-cyan-600 to-blue-400"
-                    )}
-                    initial={{ height: "0%" }}
-                    animate={{ height: `${level}%` }}
-                    transition={{ type: "spring", bounce: 0, damping: 15 }}
-                />
-
-                {/* Tick Marks */}
-                <div className="absolute inset-0 z-10 flex flex-col justify-between py-2 px-1 pointer-events-none">
-                    {[...Array(5)].map((_, i) => (
-                        <div key={i} className="w-full h-px bg-gray-800/50" />
-                    ))}
-                </div>
-            </div>
-            <span className={cn("text-[10px] font-mono font-bold transition-colors", isCritical ? "text-red-400" : "text-gray-500")}>
-                {level.toFixed(0)}%
-            </span>
-        </div>
-    );
-};
 
 const Dashboard = () => {
-    // --- SIMULATION STATE ---
-    // Links: [Link 2 (Critical), Link 3 (Donor), Link 4 (Donor)]
-    const [history, setHistory] = useState([]);
-    const [time, setTime] = useState(0);
-    const [isSurge, setIsSurge] = useState(false);
-
-    // Core parameters that the "AI" manipulates
-    const [state, setState] = useState({
-        link2: { bandwidth: 30, buffer: 10, loss: 0.5 },
-        link3: { bandwidth: 60, buffer: 5, loss: 0.2 },
-        link4: { bandwidth: 40, buffer: 5, loss: 0.1 }
+    const [socketData, setSocketData] = useState({
+        capacity: 10.0,
+        throughput: 0.0,
+        loss: 0.0,
+        action: "INITIALIZING",
+        reward: 0
     });
+    
+    const [history, setHistory] = useState([]);
 
-    // REFS for precise control of the "Story"
-    const surgeTimerRef = useRef(null);
-
-    // --- PHYSICS ENGINE (The Closed-Loop System) ---
     useEffect(() => {
-        // Slowing down the loop to 2000ms for smoother visual updates
-        const tick = setInterval(() => {
-            setTime(t => t + 1);
-
-            setState(curr => {
-                let next = { ...curr };
-
-                // 1. GENERATE LOAD
-                const baseLoad = { l2: 25, l3: 20, l4: 15 };
-                const noise = () => Math.random() * 5 - 2.5;
-
-                let traffic = {
-                    l2: baseLoad.l2 + noise(),
-                    l3: baseLoad.l3 + noise(),
-                    l4: baseLoad.l4 + noise()
-                };
-
-                if (isSurge) {
-                    traffic.l2 += 50;
-                }
-
-                // Function to mimic the "Quick Adaptation" logic requested
-                const updateLinkState = (linkKey, trafficInput) => {
-                    let link = { ...next[linkKey] };
-                    const capacity = link.bandwidth;
-
-                    // Buffer Physics
-                    if (trafficInput > capacity) {
-                        link.buffer = Math.min(100, link.buffer + (trafficInput - capacity) * 0.8);
-                    } else {
-                        link.buffer = Math.max(5, link.buffer - (capacity - trafficInput) * 1.5);
-                    }
-
-                    // Calculate Raw Loss Potential based on Buffer
-                    let calculatedLoss = link.loss;
-                    if (link.buffer > 80) calculatedLoss += 0.5;
-                    else if (link.buffer > 50) calculatedLoss += 0.1;
-                    else calculatedLoss *= 0.9;
-
-                    // Add noise to loss
-                    calculatedLoss += (Math.random() * 0.5 - 0.2);
-                    calculatedLoss = Math.max(0.1, calculatedLoss);
-
-                    // --- QUICK ADAPTATION LOGIC ---
-                    // 1. Stabilize at 1%
-                    if (calculatedLoss >= 1.0 && calculatedLoss <= 1.5 && !isSurge) {
-                        // Artificially stabilize to show "AI Control"
-                        link.loss = 1.0;
-                    }
-                    // 2. Auto-Regulate if > 3% (Emergency Pullback)
-                    else if (calculatedLoss > 3.0 && !isSurge) {
-                        link.loss = 2.8; // Quickly pull back
-                    } else {
-                        link.loss = calculatedLoss;
-                    }
-
-                    return link;
-                };
-
-                next.link2 = updateLinkState('link2', traffic.l2);
-                next.link3 = updateLinkState('link3', traffic.l3);
-                next.link4 = updateLinkState('link4', traffic.l4);
-
-                // --- AI INTERVENTION (Bandwidth Re-allocation) ---
-                if (next.link2.loss > 2.5 || (isSurge && next.link2.buffer > 50)) {
-                    const transferAmount = 5; // Aggressive transfer
-                    if (next.link3.bandwidth > 10) {
-                        next.link2.bandwidth = Math.min(90, next.link2.bandwidth + transferAmount);
-                        next.link3.bandwidth = Math.max(10, next.link3.bandwidth - transferAmount);
-                    }
-                } else if (!isSurge && next.link2.bandwidth > 30) {
-                    const decay = 2; // Slower decay
-                    next.link2.bandwidth -= decay;
-                    next.link3.bandwidth += decay;
-                }
-
-                return next;
+        const socket = io('http://localhost:5000');
+        
+        socket.on('metrics_update', (data) => {
+            setSocketData({
+                capacity: data.current_capacity_limit || 10,
+                throughput: data.bandwidth_mbps || 0,
+                loss: (data.loss_rate || 0) * 100,
+                action: data.agent_action || "HOLD",
+                reward: data.agent_reward || 0
             });
 
-        }, 2000); // UPDATED: 2000ms Interval
-
-        return () => clearInterval(tick);
-    }, [isSurge]);
-
-    // --- HISTORY TRACKER (The Graph) ---
-    useEffect(() => {
-        setHistory(prev => {
-            const newPoint = {
-                time: time,
-                l2: state.link2.loss,
-                l3: state.link3.loss,
-                l4: state.link4.loss
-            };
-            const newHistory = [...prev, newPoint];
-            if (newHistory.length > 25) newHistory.shift(); // UPDATED: Limit to 25 points
-            return newHistory;
+            setHistory(prev => {
+                const newPoint = {
+                    time: new Date().toLocaleTimeString(),
+                    loss: (data.loss_rate || 0) * 100
+                };
+                const newHist = [...prev, newPoint];
+                if(newHist.length > 50) newHist.shift();
+                return newHist;
+            });
         });
-    }, [time, state]);
 
-    const handleTriggerSurge = () => {
-        setIsSurge(true);
-        if (surgeTimerRef.current) clearTimeout(surgeTimerRef.current);
-        surgeTimerRef.current = setTimeout(() => setIsSurge(false), 10000); // 10s Surge
-    };
+        return () => socket.disconnect();
+    }, []);
 
-    const handleReset = () => {
-        setIsSurge(false);
-        setState({
-            link2: { bandwidth: 30, buffer: 10, loss: 0.5 },
-            link3: { bandwidth: 60, buffer: 5, loss: 0.2 },
-            link4: { bandwidth: 40, buffer: 5, loss: 0.1 }
-        });
-        setHistory([]);
+    // Helper for trend icons
+    const getActionIcon = () => {
+        if(socketData.action.includes("INCREASE")) return <TrendingUp size={20} />;
+        if(socketData.action.includes("DECREASE")) return <TrendingDown size={20} />;
+        return <Activity size={20} />;
     };
 
     return (
-        <div className="min-h-screen bg-[#09090b] text-white p-6 font-sans overflow-hidden flex flex-col selection:bg-cyan-500/30">
-            {/* Header */}
-            <header className="flex justify-between items-end border-b border-gray-800 pb-4 mb-4">
+        <div className="min-h-screen bg-black text-white font-sans flex flex-col p-6 overflow-hidden selection:bg-indigo-500/30">
+            
+            {/* HEADER */}
+            <header className="flex justify-between items-end border-b border-gray-800 pb-6 mb-4 bg-black z-50">
                 <div>
-                    <h1 className="text-2xl font-black italic tracking-tighter bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent">
-                        NEURO-FLOW V2.0
+                    <h1 className="text-4xl font-black italic tracking-tighter text-white mb-2">
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">NEURO</span>-LINK V4
                     </h1>
-                    <div className="flex items-center gap-2 text-xs font-mono text-gray-500 mt-1">
-                        <Activity size={12} className="text-emerald-500" />
-                        <span>AGENT: DEEP Q-NETWORK (DQN)</span>
-                        <span className="text-gray-700">|</span>
-                        <span>STATUS: {isSurge ? "INTERVENTION ACTIVE" : "MONITORING"}</span>
+                    <div className="flex gap-6 text-[11px] font-mono text-gray-500 uppercase tracking-widest">
+                        <span className="flex items-center gap-2"><Server size={14} className="text-emerald-500"/> LIVE SOCKET FEED</span>
+                        <span className="text-indigo-400">RL-AGENT: DEEP Q-NETWORK</span>
                     </div>
                 </div>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={handleReset}
-                        className="px-6 py-2 rounded bg-gray-900 border border-gray-700 text-xs font-bold hover:bg-gray-800 transition-colors"
-                    >
-                        RESET SYSTEM
-                    </button>
-                    <button
-                        onClick={handleTriggerSurge}
-                        className={cn(
-                            "px-6 py-2 rounded text-xs font-bold transition-all duration-300 shadow-[0_0_20px_rgba(220,38,38,0.2)]",
-                            isSurge
-                                ? "bg-red-500 text-white shadow-[0_0_30px_rgba(239,68,68,0.6)] scale-95"
-                                : "bg-red-900/20 border border-red-800 text-red-500 hover:bg-red-900/40 hover:scale-105"
-                        )}
-                    >
-                        {isSurge ? "⚠ SURGE IN PROGRESS" : "⚠ INJECT HUGE LOAD"}
-                    </button>
+                <div className="text-right">
+                    <div className="text-[10px] text-gray-500 font-mono uppercase tracking-widest mb-1">Cumulative Reward</div>
+                    <div className={cn("text-4xl font-black font-mono", socketData.reward > 0 ? "text-emerald-400" : "text-rose-500")}>
+                        {socketData.reward.toFixed(2)}
+                    </div>
                 </div>
             </header>
 
-            {/* Main Stage */}
-            <main className="flex-1 grid grid-cols-12 gap-6 relative">
+            {/* MAIN CONTENT */}
+            <main className="flex-1 flex flex-col gap-6">
+                
+                {/* 1. VISUALIZATION STAGE (Takes most space) */}
+                <div className="flex-[3] bg-[#08080a] rounded-[2rem] border border-gray-900 flex flex-col items-center justify-center relative overflow-hidden shadow-2xl">
+                    
+                    {/* Deep Space Background Effect */}
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 via-black to-black opacity-80 pointer-events-none" />
+                    
+                    {/* Main Stage */}
+                    <div className="relative z-10 w-full max-w-7xl flex items-center justify-between gap-12 px-12">
+                        <RouterNode label="R1" ip="10.0.0.1" isSource />
+                        
+                        <DynamicLink 
+                            capacity={socketData.capacity} 
+                            throughput={socketData.throughput} 
+                            loss={socketData.loss}
+                        />
 
-                {/* Visual Layer - Pipes & Buffers (The "Actor") */}
-                <div className="col-span-8 flex flex-col justify-center relative pr-8">
-                    {/* Brain Overlay */}
-                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                        <Brain size={200} />
+                        <RouterNode label="R2" ip="10.0.0.2" />
                     </div>
 
-                    <div className="flex items-end mb-2">
-                        <h2 className="text-xs font-mono text-gray-500 mb-4 block w-full border-b border-gray-800/50 pb-2">
-                            ACTIVE TOPOLOGY Map & BANDWIDTH ALLOCATION
-                        </h2>
-                    </div>
-
-                    <div className="flex w-full items-center">
-                        <div className="w-full">
-                            <Pipe label="LINK 2 (CRIT)" bandwidth={state.link2.bandwidth} errorRate={state.link2.loss} />
-                        </div>
-                        <div className="pl-4 pb-10">
-                            <BufferGauge level={state.link2.buffer} label="L2" />
-                        </div>
-                    </div>
-
-                    <div className="flex w-full items-center opacity-80">
-                        <div className="w-full">
-                            <Pipe label="LINK 3 (DONOR)" bandwidth={state.link3.bandwidth} errorRate={state.link3.loss} isDonor />
-                        </div>
-                        <div className="pl-4 pb-10">
-                            <BufferGauge level={state.link3.buffer} label="L3" />
-                        </div>
-                    </div>
-
-                    <div className="flex w-full items-center opacity-60">
-                        <div className="w-full">
-                            <Pipe label="LINK 4" bandwidth={state.link4.bandwidth} errorRate={state.link4.loss} />
-                        </div>
-                        <div className="pl-4 pb-10">
-                            <BufferGauge level={state.link4.buffer} label="L4" />
-                        </div>
+                    {/* AI Action Pill */}
+                    <div className="absolute bottom-8 z-40">
+                         <div className={cn(
+                             "flex items-center gap-4 px-8 py-4 rounded-2xl border-2 backdrop-blur-xl shadow-2xl transition-all duration-300",
+                             socketData.action.includes("INCREASE") ? "bg-indigo-950/50 border-indigo-500 text-indigo-200" :
+                             socketData.action.includes("DECREASE") ? "bg-orange-950/50 border-orange-500 text-orange-200" :
+                             "bg-gray-900/80 border-gray-700 text-gray-400"
+                         )}>
+                             <div className={cn("p-2 rounded-lg text-black", 
+                                 socketData.action.includes("INCREASE") ? "bg-indigo-400" :
+                                 socketData.action.includes("DECREASE") ? "bg-orange-400" : "bg-gray-400"
+                             )}>
+                                 {getActionIcon()}
+                             </div>
+                             <div>
+                                 <div className="text-[10px] uppercase font-bold tracking-widest opacity-60">AI Decision</div>
+                                 <div className="text-xl font-black font-mono">{socketData.action}</div>
+                             </div>
+                         </div>
                     </div>
                 </div>
 
-                {/* Data Layer - The "Critic" & History */}
-                <div className="col-span-4 flex flex-col gap-4 bg-gray-900/20 rounded-xl border border-gray-800/50 p-4 backdrop-blur-sm">
-                    <h3 className="text-xs font-mono font-bold text-gray-400 flex items-center gap-2">
-                        <Activity size={14} />
-                        REAL-TIME LOSS HISTORY
-                    </h3>
-
-                    <div className="flex-1 w-full min-h-0 bg-gray-950/50 rounded-lg border border-gray-800 relative overflow-hidden" style={{ height: '300px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={history}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
-                                <XAxis dataKey="time" hide />
-                                <YAxis domain={[0, 6]} hide />
-
-                                {/* 1% Stability Threshold */}
-                                <ReferenceLine y={1} stroke="#22d3ee" strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: "OPTIMAL (1%)", fill: "#22d3ee", fontSize: 10 }} />
-
-                                {/* 3% Critical Threshold */}
-                                <ReferenceLine y={3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1} label={{ value: "SLA LIMIT (3%)", fill: "#ef4444", fontSize: 10 }} />
-
-                                <Line
-                                    type="monotone"
-                                    dataKey="l2"
-                                    stroke="#ef4444"
-                                    strokeWidth={3}
-                                    dot={false}
-                                    isAnimationActive={true}
-                                    animationDuration={1500}
-                                    animationEasing="ease-in-out"
-                                />
-                                <Line
-                                    type="monotone"
-                                    dataKey="l3"
-                                    stroke="#06b6d4"
-                                    strokeWidth={1.5}
-                                    dot={false}
-                                    strokeOpacity={0.5}
-                                    isAnimationActive={true}
-                                    animationDuration={1500}
-                                    animationEasing="ease-in-out"
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
-
-                        {/* Legend */}
-                        <div className="absolute top-2 right-2 flex flex-col gap-1 pointer-events-none">
-                            <div className="flex items-center gap-2 text-[10px] font-mono">
-                                <div className="w-2 h-2 rounded-full bg-red-500" />
-                                <span className="text-gray-400">LINK 2 (TARGET)</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-[10px] font-mono">
-                                <div className="w-2 h-2 rounded-full bg-cyan-500 opacity-50" />
-                                <span className="text-gray-400">LINK 3 (DONOR)</span>
-                            </div>
+                {/* 2. METRICS ROW */}
+                <div className="h-48 grid grid-cols-12 gap-6">
+                    
+                    {/* Loss Graph */}
+                    <div className="col-span-8 bg-gray-900/40 rounded-3xl border border-gray-800 p-6 relative backdrop-blur-sm">
+                        <h4 className="absolute top-6 left-6 text-xs font-bold font-mono text-gray-400 flex items-center gap-2">
+                            <Activity size={16} className="text-rose-500" /> REAL-TIME PACKET LOSS (%)
+                        </h4>
+                        <div className="w-full h-full pt-6">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={history}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                                    <YAxis domain={[0, 6]} hide />
+                                    <Line 
+                                        type="monotone" 
+                                        dataKey="loss" 
+                                        stroke="#f43f5e" 
+                                        strokeWidth={3} 
+                                        dot={false}
+                                        isAnimationActive={false} 
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
                         </div>
                     </div>
 
-                    {/* Stats Cards */}
-                    <div className="grid grid-cols-2 gap-2 mt-auto">
-                        <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-800">
-                            <div className="text-[10px] text-gray-500 font-mono mb-1">Q-VALUE (REWARD)</div>
-                            <div className={cn("text-xl font-bold font-mono transition-colors", isSurge ? "text-yellow-400" : "text-green-400")}>
-                                {isSurge ? "-0.842" : "+0.994"}
+                    {/* Efficiency Card */}
+                    <div className="col-span-4 bg-gray-900/40 rounded-3xl border border-gray-800 p-6 flex flex-col justify-center items-center backdrop-blur-sm relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent" />
+                        
+                        <div className="relative z-10 text-center">
+                            <div className="text-xs font-bold font-mono text-gray-500 uppercase tracking-widest mb-2">Link Efficiency</div>
+                            <div className="text-6xl font-black text-white tracking-tighter">
+                                {((socketData.throughput / socketData.capacity) * 100).toFixed(0)}<span className="text-2xl text-gray-600">%</span>
                             </div>
                         </div>
-                        <div className="bg-gray-900/50 p-3 rounded-lg border border-gray-800">
-                            <div className="text-[10px] text-gray-500 font-mono mb-1">TOTAL THROUGHPUT</div>
-                            <div className="text-xl font-bold text-white font-mono">
-                                {(state.link2.bandwidth + state.link3.bandwidth + state.link4.bandwidth).toFixed(0)} Gbps
-                            </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full h-2 bg-gray-800 rounded-full mt-6 overflow-hidden relative z-10">
+                            <motion.div 
+                                className={cn("h-full transition-all duration-300", 
+                                    socketData.loss > 0 ? "bg-rose-500" : "bg-emerald-400"
+                                )}
+                                animate={{ width: `${Math.min(100, (socketData.throughput / socketData.capacity) * 100)}%` }} 
+                            />
                         </div>
                     </div>
+
                 </div>
 
             </main>
