@@ -12,9 +12,13 @@
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+<<<<<<< HEAD
     "clsx": "^2.1.1",
     "framer-motion": "^12.29.2",
     "lucide-react": "^0.563.0",
+=======
+    "@react-three/postprocessing": "^3.0.4",
+>>>>>>> 6074726ad1c22bd415a048f1b758048795842295
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.0",
