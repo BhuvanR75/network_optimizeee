@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import Scene from "./components/Scene";
+import FirstStage from "./components/1st";
 import Dashboard from "./components/2ndstage";
 
 const Home = () => (
@@ -40,6 +41,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/1" element={<FirstStage />} />
         <Route path="/2" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
