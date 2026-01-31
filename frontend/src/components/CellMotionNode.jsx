@@ -1,44 +1,34 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
 
-export default function CellMotionNode({ position, phase }) {
+export default function CellMotionNode({ position, phase = 0 }) {
   const meshRef = useRef();
-  const materialRef = useRef();
 
-  const baseScale = 1;
+  const baseX = position[0];
   const baseY = position[1];
+  const baseZ = position[2];
 
   useFrame(({ clock }) => {
+    if (!meshRef.current) return;
+
     const t = clock.getElapsedTime() + phase;
 
-    if (!meshRef.current || !materialRef.current) return;
+    // 🔹 small orbital motion
+    meshRef.current.position.x = baseX + Math.sin(t * 2) * 0.15;
+    meshRef.current.position.z = baseZ + Math.cos(t * 2) * 0.15;
 
-    // 🔹 POPPING (faster & smaller)
-    const scale = baseScale + Math.sin(t * 3) * 0.25;
-    meshRef.current.scale.set(scale, scale, scale);
+    // 🔹 slight vertical bob
+    meshRef.current.position.y = baseY + Math.sin(t * 3) * 0.12;
 
-    // 🔹 FLOAT (micro)
-    meshRef.current.position.y =
-      baseY + Math.sin(t * 2) * 0.25;
-
-    // 🔹 COLOR CYCLE (different palette)
-    const hue = (t * 80) % 360;
-    materialRef.current.color.setHSL(
-      hue / 360,
-      0.9,
-      0.6
-    );
+    // 🔹 pulse
+    const s = 1 + Math.sin(t * 4) * 0.2;
+    meshRef.current.scale.set(s, s, s);
   });
 
   return (
     <mesh ref={meshRef} position={position}>
       <boxGeometry args={[0.4, 0.4, 0.4]} />
-      <meshStandardMaterial
-        ref={materialRef}
-        color="#fde68a"
-        emissive="#000000"
-      />
+      <meshStandardMaterial color="#fde68a" />
     </mesh>
   );
 }
