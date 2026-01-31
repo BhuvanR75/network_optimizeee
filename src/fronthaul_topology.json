@@ -1,0 +1,52 @@
+{
+  "DU": {
+    "Link-1": {
+      "cells": [
+        "Cell-13",
+        "Cell-15",
+        "Cell-16",
+        "Cell-1"
+      ]
+    },
+    "Link-2": {
+      "cells": [
+        "Cell-8",
+        "Cell-10",
+        "Cell-18",
+        "Cell-20"
+      ]
+    },
+    "Link-3": {
+      "cells": [
+        "Cell-19",
+        "Cell-2",
+        "Cell-23",
+        "Cell-12"
+      ]
+    },
+    "Link-4": {
+      "cells": [
+        "Cell-6",
+        "Cell-7",
+        "Cell-24",
+        "Cell-11"
+      ]
+    },
+    "Link-5": {
+      "cells": [
+        "Cell-3",
+        "Cell-5",
+        "Cell-17",
+        "Cell-14"
+      ]
+    },
+    "Link-6": {
+      "cells": [
+        "Cell-21",
+        "Cell-4",
+        "Cell-9",
+        "Cell-22"
+      ]
+    }
+  }
+}
