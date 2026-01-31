@@ -1,19 +1,52 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import Scene from "./components/Scene";
 
 export default function App() {
   return (
-    <Canvas camera={{ position: [0, 12, 30], fov: 50 }}>
-      {/* Lights */}
-      <ambientLight intensity={0.8} />
-      <directionalLight position={[10, 15, 10]} intensity={1} />
+    <Canvas
+      camera={{ position: [14, 16, 18], fov: 40 }}
+      gl={{ antialias: true }}
+    >
+      {/* Background */}
+      <color attach="background" args={["#050814"]} />
 
-      {/* Main Scene */}
+      {/* Lights */}
+      <ambientLight intensity={0.5} />
+      <directionalLight position={[10, 20, 10]} intensity={1.6} />
+      <pointLight position={[0, 10, 0]} intensity={1.5} color="#38bdf8" />
+
+      {/* Scene */}
       <Scene />
 
-      {/* Camera controls */}
-      <OrbitControls />
+      {/* Bloom → ONLY links glow */}
+      <EffectComposer>
+        <Bloom
+          intensity={1.5}
+          luminanceThreshold={0}
+          luminanceSmoothing={0.9}
+        />
+      </EffectComposer>
+
+      {/* Controls */}
+      <OrbitControls
+        enableZoom={false}
+        enablePan={false}
+        maxPolarAngle={Math.PI / 2.2}
+      />
     </Canvas>
+  </div>
+);
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/1" element={<FirstStage />} />
+        <Route path="/2" element={<Dashboard />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
