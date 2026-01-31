@@ -37,7 +37,7 @@ const Pipe = ({ label, bandwidth, errorRate, isDonor = false }) => {
                     )}
                     initial={false}
                     animate={{ width: `${widthPercent}%` }}
-                    transition={{ type: "spring", stiffness: 40, damping: 20 }}
+                    transition={{ type: "spring", stiffness: 40, damping: 20, duration: 2 }} // Smoother transition
                 >
                     {/* Flow Animation (Slower = Less Bandwidth, Faster = More) */}
                     <motion.div
@@ -133,73 +133,78 @@ const Dashboard = () => {
 
     // --- PHYSICS ENGINE (The Closed-Loop System) ---
     useEffect(() => {
+        // Slowing down the loop to 2000ms for smoother visual updates
         const tick = setInterval(() => {
             setTime(t => t + 1);
 
             setState(curr => {
                 let next = { ...curr };
 
-                // 1. GENERATE LOAD (Traffic Pattern)
-                // Normal Load: Random fluctuations
-                // Surge Load: Massive spike targeting Link 2
+                // 1. GENERATE LOAD
                 const baseLoad = { l2: 25, l3: 20, l4: 15 };
                 const noise = () => Math.random() * 5 - 2.5;
 
-                let incomingTraffic = {
+                let traffic = {
                     l2: baseLoad.l2 + noise(),
                     l3: baseLoad.l3 + noise(),
                     l4: baseLoad.l4 + noise()
                 };
 
                 if (isSurge) {
-                    incomingTraffic.l2 += 50; // MASSIVE spike (Requires ~75Gbps)
+                    traffic.l2 += 50;
                 }
 
-                // 2. BUFFER PHYSICS (Queue fill rate)
-                // If Traffic > Bandwidth, Buffer Fills. 
-                // If Traffic < Bandwidth, Buffer Drains.
-                const updateLink = (linkKey, traffic) => {
-                    const link = { ...next[linkKey] }; // Shallow copy specific link
+                // Function to mimic the "Quick Adaptation" logic requested
+                const updateLinkState = (linkKey, trafficInput) => {
+                    let link = { ...next[linkKey] };
                     const capacity = link.bandwidth;
 
-                    // Simple queue theory approximation
-                    if (traffic > capacity) {
-                        link.buffer = Math.min(100, link.buffer + (traffic - capacity) * 0.8);
+                    // Buffer Physics
+                    if (trafficInput > capacity) {
+                        link.buffer = Math.min(100, link.buffer + (trafficInput - capacity) * 0.8);
                     } else {
-                        link.buffer = Math.max(5, link.buffer - (capacity - traffic) * 1.5);
+                        link.buffer = Math.max(5, link.buffer - (capacity - trafficInput) * 1.5);
                     }
 
-                    // 3. LOSS CALCULATION (Based on Buffer overflow + Random drop)
-                    // If buffer is high, loss grows exponentially
-                    if (link.buffer > 80) {
-                        link.loss = Math.min(10, link.loss + 0.5); // Fast rise
-                    } else if (link.buffer > 50) {
-                        link.loss = Math.min(5, link.loss + 0.1);
+                    // Calculate Raw Loss Potential based on Buffer
+                    let calculatedLoss = link.loss;
+                    if (link.buffer > 80) calculatedLoss += 0.5;
+                    else if (link.buffer > 50) calculatedLoss += 0.1;
+                    else calculatedLoss *= 0.9;
+
+                    // Add noise to loss
+                    calculatedLoss += (Math.random() * 0.5 - 0.2);
+                    calculatedLoss = Math.max(0.1, calculatedLoss);
+
+                    // --- QUICK ADAPTATION LOGIC ---
+                    // 1. Stabilize at 1%
+                    if (calculatedLoss >= 1.0 && calculatedLoss <= 1.5 && !isSurge) {
+                        // Artificially stabilize to show "AI Control"
+                        link.loss = 1.0;
+                    }
+                    // 2. Auto-Regulate if > 3% (Emergency Pullback)
+                    else if (calculatedLoss > 3.0 && !isSurge) {
+                        link.loss = 2.8; // Quickly pull back
                     } else {
-                        link.loss = Math.max(0.1, link.loss * 0.9); // Decay
+                        link.loss = calculatedLoss;
                     }
 
                     return link;
                 };
 
-                next.link2 = updateLink('link2', incomingTraffic.l2);
-                next.link3 = updateLink('link3', incomingTraffic.l3);
-                next.link4 = updateLink('link4', incomingTraffic.l4);
+                next.link2 = updateLinkState('link2', traffic.l2);
+                next.link3 = updateLinkState('link3', traffic.l3);
+                next.link4 = updateLinkState('link4', traffic.l4);
 
-                // --- AI AGENT INTELLIGENCE (The "Actor") ---
-                // Rule: If Link 2 Loss > 2.5% AND Buffer > 60%, INTERVENE
-                if (next.link2.loss > 2.5 && next.link2.buffer > 60) {
-                    // "Steal" bandwidth from Link 3 to Link 2
-                    // This is the "Action"
-                    const transferAmount = 1.5; // Gbps per tick adjustment (smooth)
-
+                // --- AI INTERVENTION (Bandwidth Re-allocation) ---
+                if (next.link2.loss > 2.5 || (isSurge && next.link2.buffer > 50)) {
+                    const transferAmount = 5; // Aggressive transfer
                     if (next.link3.bandwidth > 10) {
                         next.link2.bandwidth = Math.min(90, next.link2.bandwidth + transferAmount);
                         next.link3.bandwidth = Math.max(10, next.link3.bandwidth - transferAmount);
                     }
                 } else if (!isSurge && next.link2.bandwidth > 30) {
-                    // Decay back to normal if surge is over
-                    const decay = 0.5;
+                    const decay = 2; // Slower decay
                     next.link2.bandwidth -= decay;
                     next.link3.bandwidth += decay;
                 }
@@ -207,7 +212,7 @@ const Dashboard = () => {
                 return next;
             });
 
-        }, 100); // 100ms Tick
+        }, 2000); // UPDATED: 2000ms Interval
 
         return () => clearInterval(tick);
     }, [isSurge]);
@@ -222,16 +227,15 @@ const Dashboard = () => {
                 l4: state.link4.loss
             };
             const newHistory = [...prev, newPoint];
-            if (newHistory.length > 50) newHistory.shift(); // Keep 5 seconds of data (10tick/s * 5s = 50)
+            if (newHistory.length > 25) newHistory.shift(); // UPDATED: Limit to 25 points
             return newHistory;
         });
     }, [time, state]);
 
     const handleTriggerSurge = () => {
         setIsSurge(true);
-        // Surge lasts for 5 seconds then stops
         if (surgeTimerRef.current) clearTimeout(surgeTimerRef.current);
-        surgeTimerRef.current = setTimeout(() => setIsSurge(false), 8000);
+        surgeTimerRef.current = setTimeout(() => setIsSurge(false), 10000); // 10s Surge
     };
 
     const handleReset = () => {
@@ -333,12 +337,14 @@ const Dashboard = () => {
                     </h3>
 
                     <div className="flex-1 w-full min-h-0 bg-gray-950/50 rounded-lg border border-gray-800 relative overflow-hidden" style={{ height: '300px' }}>
-                        {/* The dashed threshold line is rendered by Recharts, but we can exaggerate it here visually if needed */}
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={history}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
                                 <XAxis dataKey="time" hide />
                                 <YAxis domain={[0, 6]} hide />
+
+                                {/* 1% Stability Threshold */}
+                                <ReferenceLine y={1} stroke="#22d3ee" strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: "OPTIMAL (1%)", fill: "#22d3ee", fontSize: 10 }} />
 
                                 {/* 3% Critical Threshold */}
                                 <ReferenceLine y={3} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1} label={{ value: "SLA LIMIT (3%)", fill: "#ef4444", fontSize: 10 }} />
@@ -349,7 +355,9 @@ const Dashboard = () => {
                                     stroke="#ef4444"
                                     strokeWidth={3}
                                     dot={false}
-                                    isAnimationActive={false}
+                                    isAnimationActive={true}
+                                    animationDuration={1500}
+                                    animationEasing="ease-in-out"
                                 />
                                 <Line
                                     type="monotone"
@@ -358,7 +366,9 @@ const Dashboard = () => {
                                     strokeWidth={1.5}
                                     dot={false}
                                     strokeOpacity={0.5}
-                                    isAnimationActive={false}
+                                    isAnimationActive={true}
+                                    animationDuration={1500}
+                                    animationEasing="ease-in-out"
                                 />
                             </LineChart>
                         </ResponsiveContainer>
