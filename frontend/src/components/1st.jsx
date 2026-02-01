@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { Server, Activity, Database, Cpu, Wifi, Network, Clock, BarChart3 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -48,6 +49,8 @@ const FirstStage = () => {
     const [cells, setCells] = useState(generateInitialCells());
     const [stage, setStage] = useState('RAW'); // RAW, OPTIMIZING, OPTIMIZED
     const [shufflingActive, setShufflingActive] = useState(true);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const navigate = useNavigate();
 
     // Heatmap State
     const [heatmapData, setHeatmapData] = useState([]);
@@ -76,27 +79,11 @@ const FirstStage = () => {
 
     // --- LOGIC: THE OPTIMIZATION (Stage 2) ---
     const handleRunOptimization = () => {
-        setShufflingActive(false);
-        setStage('OPTIMIZING');
-
-        // 1. "Settle" the nodes (Stop shuffling, move to true link)
+        setIsAnalyzing(true);
+        // Simulate "Analyzing" phase (keep shuffling active)
         setTimeout(() => {
-            setCells(prev => prev.map(cell => {
-                // Determine Optimal Link based on True Throughput
-                const bestLink = cell.trueThroughput > 400 ? 2 : 3;
-                return {
-                    ...cell,
-                    tempLink: bestLink,
-                    currentLink: bestLink, // Lock it in
-                };
-            }));
-
-            // 2. Reveal Colors (Final State)
-            setTimeout(() => {
-                setStage('OPTIMIZED');
-            }, 1000);
-
-        }, 500);
+            navigate('/');
+        }, 3000); // 3 seconds delay before navigation
     };
 
     const handleReset = () => {
@@ -204,14 +191,15 @@ const FirstStage = () => {
 
                         <button
                             onClick={stage === 'RAW' ? handleRunOptimization : handleReset}
+                            disabled={isAnalyzing}
                             className={cn(
                                 "w-full py-4 rounded font-bold tracking-widest transition-all text-sm",
                                 stage === 'RAW'
-                                    ? "bg-gray-100 text-black hover:scale-[1.02]"
+                                    ? "bg-gray-100 text-black hover:scale-[1.02] disabled:opacity-80 disabled:hover:scale-100"
                                     : "bg-gray-800 text-gray-400 hover:bg-gray-700"
                             )}
                         >
-                            {stage === 'RAW' ? "RUN OPTIMIZATION ALGORITHM" : "RESET SIMULATION"}
+                            {isAnalyzing ? "ANALYZING NETWORK TRAFFIC..." : (stage === 'RAW' ? "RUN OPTIMIZATION ALGORITHM" : "RESET SIMULATION")}
                         </button>
                     </div>
 
@@ -277,7 +265,7 @@ const FirstStage = () => {
                 </div>
             </div>
 
-            {/* --- BOTTOM: CORRELATED HEATMAP --- */}
+            {/* --- BOTTOM: CORRELATED HEATMAP (TRANSPOSED) --- */}
             <div className="w-full border-t border-gray-800 pt-8 mt-4">
                 <div className="flex justify-between items-end mb-4">
                     <h3 className="text-lg font-bold flex items-center gap-2">
@@ -291,48 +279,45 @@ const FirstStage = () => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-[60px_1fr] gap-2">
-                    {/* Y-Axis Labels (Cell IDs) */}
-                    <div className="flex flex-col gap-[2px]">
-                        {sortedHeatmapData.map(row => (
-                            <div key={row.cellId} className="h-4 text-[10px] font-mono text-gray-500 text-right pr-2 leading-4">
-                                RU{row.cellId}
+                <div className="w-full overflow-x-auto pb-4">
+                    <div className="flex gap-1 w-fit">
+                        {sortedHeatmapData.map(ru => (
+                            <div key={ru.cellId} className="flex flex-col gap-[2px]">
+                                {/* RU Label Header */}
+                                <div className="h-4 text-[9px] font-mono text-center text-gray-500 leading-4">
+                                    RU{ru.cellId}
+                                </div>
+
+                                {/* Vertical History Stack */}
+                                <div className="flex flex-col gap-[2px]">
+                                    {ru.history.map((status, i) => (
+                                        <motion.div
+                                            layout
+                                            key={`${ru.cellId}-${i}`}
+                                            className={cn(
+                                                "h-3 w-3 rounded-[1px] transition-colors duration-300 relative group",
+                                                status === 'LOSS' ? "bg-red-600 shadow-[0_0_5px_rgba(220,38,38,0.5)]"
+                                                    : status === 'TRAFFIC' ? "bg-blue-500/40"
+                                                        : "bg-gray-900"
+                                            )}
+                                            onMouseEnter={() => setHoveredCell(ru.cellId)}
+                                            onMouseLeave={() => setHoveredCell(null)}
+                                        >
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-black border border-gray-700 text-[10px] text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap">
+                                                {status} (t{i})
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
                             </div>
                         ))}
                     </div>
 
-                    {/* The Grid */}
-                    <div className="grid grid-cols-20 gap-[2px] w-full">
-                        {sortedHeatmapData.map(row => (
-                            <React.Fragment key={`row-${row.cellId}`}>
-                                {row.history.map((status, i) => (
-                                    <motion.div
-                                        layout
-                                        key={`${row.cellId}-${i}`}
-                                        className={cn(
-                                            "h-4 w-full rounded-[1px] transition-colors duration-300 relative group",
-                                            status === 'LOSS' ? "bg-red-600 shadow-[0_0_5px_rgba(220,38,38,0.5)]"
-                                                : status === 'TRAFFIC' ? "bg-blue-500/40"
-                                                    : "bg-gray-900"
-                                        )}
-                                        onMouseEnter={() => setHoveredCell(row.cellId)}
-                                        onMouseLeave={() => setHoveredCell(null)}
-                                    >
-                                        {/* Tooltip */}
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-black border border-gray-700 text-[10px] text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap">
-                                            {status} (t{i})
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </React.Fragment>
-                        ))}
-                    </div>
-
-                    {/* Correlation Brackets (Overlay) */}
+                    {/* Correlation Overlay (Adjusted for Transposed Layout) */}
                     {stage === 'OPTIMIZED' && (
-                        <div className="col-start-2 border-l-2 border-dashed border-red-500/30 absolute left-[70px] top-[140px] h-[30%] pointer-events-none">
-                            <span className="absolute -left-20 top-1/2 -translate-y-1/2 text-[10px] text-red-500 font-mono bg-black/80 px-1 border border-red-900">
-                                CORRELATED LOSS
+                        <div className="relative mt-2">
+                            <span className="text-[10px] text-red-500 font-mono bg-black/80 px-1 border border-red-900 inline-block">
+                                * CORRELATED LOSS DETECTED IN RU CLUSTER
                             </span>
                         </div>
                     )}
