@@ -4,6 +4,7 @@ import shutil
 import zipfile
 import uuid
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from inference import infer_topology
 
 UPLOAD_DIR = "uploads"
@@ -13,7 +14,11 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(EXTRACT_DIR, exist_ok=True)
 
 app = Flask(__name__)
-
+CORS(
+    app,
+    resources={r"/*": {"origins": ["http://localhost:5173"]}},
+    supports_credentials=True
+)
 # -------------------------------------------------
 # Health check
 # -------------------------------------------------
